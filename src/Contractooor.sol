@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
+
 /// @title Contractooor
 /// @author @colinnielsen
 /// @notice Arbitrates agremements between Service Providers and Service Receivers
 contract Contractooor {
+    ISablier public sablier;
+
     error NOT_SENDER_OR_RECEIVER();
 
     event AgreementProposed(
@@ -26,6 +30,10 @@ contract Contractooor {
         bool counterpartyMalfeasance;
         bool bankruptcyDissolutionInsolvency;
         bool counterpartyLostControlOfPrivateKeys;
+    }
+
+    constructor(address _sablier) {
+        sablier = ISablier(_sablier);
     }
 
     mapping(bytes32 => mapping(address => bool)) agreements;
