@@ -9,7 +9,8 @@ contract ContractooorTest is Test {
     Contractooor public contractooor;
 
     function setUp() public {
-        contractooor = new Contractooor();
+        SablierMock sablier = new SablierMock();
+        contractooor = new Contractooor(address(sablier));
     }
 
     function test_initiateAgreement() public {}
