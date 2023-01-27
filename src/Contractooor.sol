@@ -2,22 +2,41 @@
 pragma solidity 0.8.17;
 
 import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
+import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
+import {ERC20} from "@solmate/tokens/ERC20.sol";
+import {console} from "forge-std/console.sol";
 
 /// @title Contractooor
 /// @author @colinnielsen
 /// @notice Arbitrates agremements between Service Providers and Service Receivers
 contract Contractooor {
+    using SafeTransferLib for ERC20;
+
     ISablier public sablier;
 
     error NOT_SENDER_OR_RECEIVER();
+    error INCOMPATIBLE_TOKEN();
+
+    event AgreementInitiated(
+        bytes32 agreementUUID,
+        uint256 agreementId,
+        uint256 streamId,
+        address provider,
+        address receiver,
+        string scopeOfWorkURI,
+        uint32 agreementEndTimestamp,
+        ERC20 streamToken,
+        uint256 totalStreamedTokens,
+        TerminationClauses terminationClauses
+    );
 
     event AgreementProposed(
         uint256 agreementId,
         address provider,
         address receiver,
         string scopeOfWorkURI,
-        uint32 agreementEndTimestamp,
-        address streamToken,
+        uint32 targetEndTimestamp,
+        ERC20 streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses terminationClauses
     );
@@ -32,23 +51,31 @@ contract Contractooor {
         bool counterpartyLostControlOfPrivateKeys;
     }
 
+    struct Agreement {
+        address provider;
+        address receiver;
+        string scopeOfWorkURI;
+        TerminationClauses terminationClauses;
+    }
+
     constructor(address _sablier) {
         sablier = ISablier(_sablier);
     }
 
-    mapping(bytes32 => mapping(address => bool)) agreements;
+    mapping(bytes32 => mapping(address => bool)) pendingAgreements;
+    mapping(bytes32 => Agreement) liveAgreements;
 
     function proposeAgreement(
         uint256 agreementId,
         address provider,
         address receiver,
         string calldata scopeOfWorkURI,
-        uint32 agreementEndTimestamp,
-        address streamToken,
+        uint32 targetEndTimestamp,
+        ERC20 streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) external {
-        if (msg.sender != provider || msg.sender != receiver)
+        if (msg.sender != provider && msg.sender != receiver)
             revert NOT_SENDER_OR_RECEIVER();
 
         bool senderIsProvider = msg.sender == provider;
@@ -59,37 +86,43 @@ contract Contractooor {
                 provider,
                 receiver,
                 scopeOfWorkURI,
-                agreementEndTimestamp,
+                targetEndTimestamp,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
             )
         );
 
-        bool isSignedByCounterParty = agreements[agreementVersionHash][
+        bool isSignedByCounterParty = pendingAgreements[agreementVersionHash][
             senderIsProvider ? receiver : provider
         ];
 
-        if (isSignedByCounterParty)
+        if (isSignedByCounterParty) {
+            delete pendingAgreements[agreementVersionHash][
+                senderIsProvider ? receiver : provider
+            ];
+
             _initiateAgreement(
                 agreementId,
                 provider,
                 receiver,
                 scopeOfWorkURI,
-                agreementEndTimestamp,
+                targetEndTimestamp,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
             );
-        else {
-            agreements[agreementVersionHash][msg.sender] = true;
+        } else {
+            pendingAgreements[agreementVersionHash][msg.sender] = true;
+
+            if (streamToken.decimals() < 4) revert INCOMPATIBLE_TOKEN();
 
             emit AgreementProposed(
                 agreementId,
                 provider,
                 receiver,
                 scopeOfWorkURI,
-                agreementEndTimestamp,
+                targetEndTimestamp,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
@@ -102,11 +135,62 @@ contract Contractooor {
         address provider,
         address receiver,
         string calldata scopeOfWorkURI,
-        uint32 agreementEndTimestamp,
-        address streamToken,
+        uint32 targetEndTimestamp,
+        ERC20 streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
-    ) internal {}
+    ) internal {
+        bytes32 agreementUUID = keccak256(
+            abi.encode(agreementId, provider, receiver)
+        );
+
+        uint256 remainingTokens = totalStreamedTokens %
+            (targetEndTimestamp - block.timestamp);
+
+        console.log("targetEndTimestamp", targetEndTimestamp);
+        console.log("currentTimestamp", block.timestamp);
+        console.log("totalStreamedTokens", totalStreamedTokens);
+        console.log(
+            "totalStreamSeconds",
+            (targetEndTimestamp - block.timestamp)
+        );
+        console.log("remainingTokens", remainingTokens);
+
+        liveAgreements[agreementUUID] = Agreement({
+            provider: provider,
+            receiver: receiver,
+            scopeOfWorkURI: scopeOfWorkURI,
+            terminationClauses: terminationClauses
+        });
+
+        streamToken.safeTransferFrom(
+            receiver,
+            address(this),
+            totalStreamedTokens
+        );
+        streamToken.approve(address(sablier), totalStreamedTokens);
+
+        uint256 streamId = sablier.createStream({
+            recipient: provider,
+            deposit: totalStreamedTokens,
+            tokenAddress: address(streamToken),
+            startTime: block.timestamp + remainingTokens,
+            stopTime: targetEndTimestamp + remainingTokens
+        });
+
+        emit AgreementInitiated(
+            agreementUUID,
+            agreementId,
+            streamId,
+            provider,
+            receiver,
+            scopeOfWorkURI,
+            targetEndTimestamp,
+            streamToken,
+            totalStreamedTokens,
+            terminationClauses
+        );
+    }
 }
 
 /**
