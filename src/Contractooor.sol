@@ -4,7 +4,9 @@ pragma solidity 0.8.17;
 import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
 import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
 import {ERC20} from "@solmate/tokens/ERC20.sol";
-import {console} from "forge-std/console.sol";
+import {console2} from "forge-std/console2.sol";
+
+// TODO: i need to use a factory pattern
 
 /// @title Contractooor
 /// @author @colinnielsen
@@ -16,6 +18,7 @@ contract Contractooor {
 
     error NOT_SENDER_OR_RECEIVER();
     error INCOMPATIBLE_TOKEN();
+    error INVALID_END_TIME();
 
     event AgreementInitiated(
         bytes32 agreementUUID,
@@ -70,13 +73,15 @@ contract Contractooor {
         address provider,
         address receiver,
         string calldata scopeOfWorkURI,
-        uint32 targetEndTimestamp,
+        uint32 endTime,
         ERC20 streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) external {
-        if (msg.sender != provider && msg.sender != receiver)
+        if (msg.sender != provider && msg.sender != receiver) {
             revert NOT_SENDER_OR_RECEIVER();
+        }
+        if(endTime < block.timestamp) revert INVALID_END_TIME();
 
         bool senderIsProvider = msg.sender == provider;
 
@@ -86,16 +91,14 @@ contract Contractooor {
                 provider,
                 receiver,
                 scopeOfWorkURI,
-                targetEndTimestamp,
+                endTime,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
             )
         );
 
-        bool isSignedByCounterParty = pendingAgreements[agreementVersionHash][
-            senderIsProvider ? receiver : provider
-        ];
+        bool isSignedByCounterParty = pendingAgreements[agreementVersionHash][senderIsProvider ? receiver : provider];
 
         if (isSignedByCounterParty) {
             delete pendingAgreements[agreementVersionHash][
@@ -107,7 +110,7 @@ contract Contractooor {
                 provider,
                 receiver,
                 scopeOfWorkURI,
-                targetEndTimestamp,
+                endTime,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
@@ -122,11 +125,11 @@ contract Contractooor {
                 provider,
                 receiver,
                 scopeOfWorkURI,
-                targetEndTimestamp,
+                endTime,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
-            );
+                );
         }
     }
 
@@ -135,26 +138,15 @@ contract Contractooor {
         address provider,
         address receiver,
         string calldata scopeOfWorkURI,
-        uint32 targetEndTimestamp,
+        uint32 endTimestamp,
         ERC20 streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) internal {
-        bytes32 agreementUUID = keccak256(
-            abi.encode(agreementId, provider, receiver)
-        );
-
-        uint256 remainingTokens = totalStreamedTokens %
-            (targetEndTimestamp - block.timestamp);
-
-        console.log("targetEndTimestamp", targetEndTimestamp);
-        console.log("currentTimestamp", block.timestamp);
-        console.log("totalStreamedTokens", totalStreamedTokens);
-        console.log(
-            "totalStreamSeconds",
-            (targetEndTimestamp - block.timestamp)
-        );
-        console.log("remainingTokens", remainingTokens);
+        bytes32 agreementUUID = keccak256(abi.encode(agreementId, provider, receiver));
+        
+        uint256 remainingTokens = totalStreamedTokens % (endTimestamp - block.timestamp);
+        console2.log("throw");
 
         liveAgreements[agreementUUID] = Agreement({
             provider: provider,
@@ -163,19 +155,16 @@ contract Contractooor {
             terminationClauses: terminationClauses
         });
 
-        streamToken.safeTransferFrom(
-            receiver,
-            address(this),
-            totalStreamedTokens
-        );
-        streamToken.approve(address(sablier), totalStreamedTokens);
+        streamToken.safeTransferFrom(receiver, address(this), totalStreamedTokens);
+        streamToken.safeTransfer(provider, remainingTokens);
+        streamToken.approve(address(sablier), totalStreamedTokens - remainingTokens);
 
         uint256 streamId = sablier.createStream({
             recipient: provider,
-            deposit: totalStreamedTokens,
+            deposit: totalStreamedTokens - remainingTokens,
             tokenAddress: address(streamToken),
-            startTime: block.timestamp + remainingTokens,
-            stopTime: targetEndTimestamp + remainingTokens
+            startTime: block.timestamp,
+            stopTime: endTimestamp
         });
 
         emit AgreementInitiated(
@@ -185,28 +174,28 @@ contract Contractooor {
             provider,
             receiver,
             scopeOfWorkURI,
-            targetEndTimestamp,
+            endTimestamp,
             streamToken,
             totalStreamedTokens,
             terminationClauses
-        );
+            );
     }
 }
 
 /**
-    - DAO: legal entity name, type, and jurisdiction
-    - SP: legal entity name, type, jurisdiction
-    - SP's counterparty for agreement address
-    - agreement scope of work
-    - term length
-    - stream token
-    - total tokens streamed over term
-    - [x] at will (n amount of days) (optional)
-    - [x] mutual consent (always enabled)
-    - [x] material breach (always enabled) (n amount of days to cure breach)
-    - rage terminate (optional, select from choices below)
-        * legal compulsion
-        * counterparty malfeasance (indictment, fraud, sanctions, crimes of moral turpitude)
-        * bankruptcy, dissolution, insolvency, loss of necessary license/certification
-        * counterparty lost exclusive control over private keys
+ * - DAO: legal entity name, type, and jurisdiction
+ *     - SP: legal entity name, type, jurisdiction
+ *     - SP's counterparty for agreement address
+ *     - agreement scope of work
+ *     - term length
+ *     - stream token
+ *     - total tokens streamed over term
+ *     - [x] at will (n amount of days) (optional)
+ *     - [x] mutual consent (always enabled)
+ *     - [x] material breach (always enabled) (n amount of days to cure breach)
+ *     - rage terminate (optional, select from choices below)
+ * legal compulsion
+ * counterparty malfeasance (indictment, fraud, sanctions, crimes of moral turpitude)
+ * bankruptcy, dissolution, insolvency, loss of necessary license/certification
+ * counterparty lost exclusive control over private keys
  */

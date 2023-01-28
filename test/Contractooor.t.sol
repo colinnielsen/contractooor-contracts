@@ -23,11 +23,16 @@ contract ContractooorTest is Test {
         vm.label(sr, "SERVICE RECEIVER");
     }
 
-    function test_initiateAgreement() public {
-        token.mint(sr, 10000 ether);
+    function test_initiateAgreement(uint256 streamAmount) public {
+        vm.assume(streamAmount > 30 days && streamAmount < type(uint128).max);
+        uint256 timestamp = 1674941221;
+        vm.warp(timestamp);
+        uint32 endTime = uint32(block.timestamp + 30 days);
+
+        token.mint(sr, streamAmount);
 
         vm.prank(sr);
-        token.approve(address(contractooor), 10000 ether);
+        token.approve(address(contractooor), streamAmount);
 
         vm.prank(sp);
         contractooor.proposeAgreement(
@@ -35,9 +40,9 @@ contract ContractooorTest is Test {
             sp,
             sr,
             "https://example.com",
-            uint32(block.timestamp + 30 days),
+            endTime,
             token,
-            2999999999999998944000,
+            streamAmount,
             Contractooor.TerminationClauses(0, 0, false, false, false, false)
         );
 
@@ -47,11 +52,36 @@ contract ContractooorTest is Test {
             sp,
             sr,
             "https://example.com",
-            uint32(block.timestamp + 30 days),
+            endTime,
             token,
-            2999999999999998944000,
+            streamAmount,
             Contractooor.TerminationClauses(0, 0, false, false, false, false)
         );
+
+        uint256 leftOvertokens = streamAmount % (endTime - block.timestamp);
+
+        (
+            address sender,
+            address recipient,
+            uint256 deposit,
+            address tokenAddress,
+            uint256 startTime,
+            uint256 stopTime,
+            ,
+        ) = sablier.getStream(100000);
+
+        assertEq(sender, address(contractooor), "sender");
+        assertEq(recipient, sp, "recipient");
+        assertEq(deposit, streamAmount - leftOvertokens, "streamAmount");
+        assertEq(startTime, block.timestamp, "startTime");
+        assertEq(stopTime, endTime, "stopTime");
+        assertEq(tokenAddress, address(token));
+        assertEq(token.balanceOf(address(sp)), leftOvertokens, "initial deposit");
+
+        vm.warp(endTime);
+        vm.prank(sp);
+        sablier.withdrawFromStream(100000, streamAmount - leftOvertokens);
+        assertEq(token.balanceOf(address(sp)), streamAmount, "final deposit");
     }
 
     function test_cannotInitiateStreamForCounterParty() public {}
