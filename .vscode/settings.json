@@ -1,5 +1,13 @@
 {
   "solidity.packageDefaultDependenciesContractsDirectory": "src",
   "solidity.packageDefaultDependenciesDirectory": "lib",
-  "solidity.compileUsingRemoteVersion": "v0.8.17+commit.8df45f5f"
+  "solidity.compileUsingRemoteVersion": "v0.8.17+commit.8df45f5f",
+  "woke.compiler.solc.remappings": [
+    "ds-test/=lib/forge-std/lib/ds-test/src/",
+    "forge-std/=lib/forge-std/src/",
+    "@sablier/=lib/sablier/packages/",
+    "@openzeppelin/=lib/openzeppelin-contracts/contracts/",
+    "@solmate/=lib/solmate/src/",
+    "contracts/=src/"
+  ]
 }
