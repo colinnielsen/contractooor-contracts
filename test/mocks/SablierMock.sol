@@ -47,7 +47,7 @@ contract SablierMock is ISablier, ReentrancyGuard, CarefulMath {
         _;
     }
 
-    constructor() public {
+    constructor() {
         nextStreamId = 100000;
     }
 

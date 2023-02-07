@@ -3,13 +3,16 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import {ERC20, MockERC20} from "@solmate/test/utils/mocks/MockERC20.sol";
-import "src/Contractooor.sol";
+import {TerminationClauses, Agreement} from "contracts/lib/Types.sol";
+import {AgreementArbitrator} from "src/AgreementArbitrator.sol";
+import {ContractooorAgreement} from "src/ContractooorAgreement.sol";
+
 import {SablierMock} from "./mocks/SablierMock.sol";
 
-contract ContractooorTest is Test {
+contract Tests is Test {
     SablierMock sablier;
     MockERC20 token;
-    Contractooor contractooor;
+    AgreementArbitrator arbitrator;
 
     address sp = address(0x1);
     address sr = address(0x2);
@@ -17,7 +20,12 @@ contract ContractooorTest is Test {
     function setUp() public {
         sablier = new SablierMock();
         token = new MockERC20("Test", "TST", 18);
-        contractooor = new Contractooor(address(sablier));
+
+        ContractooorAgreement agreementSingleton = new ContractooorAgreement();
+        arbitrator = new AgreementArbitrator(
+            address(sablier),
+            address(agreementSingleton)
+        );
 
         vm.label(sp, "SERVICE PROVIDER");
         vm.label(sr, "SERVICE RECEIVER");
@@ -32,10 +40,10 @@ contract ContractooorTest is Test {
         token.mint(sr, streamAmount);
 
         vm.prank(sr);
-        token.approve(address(contractooor), streamAmount);
+        token.approve(address(arbitrator), streamAmount);
 
         vm.prank(sp);
-        contractooor.proposeAgreement(
+        arbitrator.agreeTo(
             1,
             sp,
             sr,
@@ -43,11 +51,11 @@ contract ContractooorTest is Test {
             endTime,
             token,
             streamAmount,
-            Contractooor.TerminationClauses(0, 0, false, false, false, false)
+            TerminationClauses(0, 0, false, false, false, false)
         );
 
         vm.prank(sr);
-        contractooor.proposeAgreement(
+        arbitrator.agreeTo(
             1,
             sp,
             sr,
@@ -55,7 +63,7 @@ contract ContractooorTest is Test {
             endTime,
             token,
             streamAmount,
-            Contractooor.TerminationClauses(0, 0, false, false, false, false)
+            TerminationClauses(0, 0, false, false, false, false)
         );
 
         uint256 leftOvertokens = streamAmount % (endTime - block.timestamp);
@@ -68,15 +76,20 @@ contract ContractooorTest is Test {
             uint256 startTime,
             uint256 stopTime,
             ,
+
         ) = sablier.getStream(100000);
 
-        assertEq(sender, address(contractooor), "sender");
+        assertEq(sender, address(arbitrator), "sender");
         assertEq(recipient, sp, "recipient");
         assertEq(deposit, streamAmount - leftOvertokens, "streamAmount");
         assertEq(startTime, block.timestamp, "startTime");
         assertEq(stopTime, endTime, "stopTime");
         assertEq(tokenAddress, address(token));
-        assertEq(token.balanceOf(address(sp)), leftOvertokens, "initial deposit");
+        assertEq(
+            token.balanceOf(address(sp)),
+            leftOvertokens,
+            "initial deposit"
+        );
 
         vm.warp(endTime);
         vm.prank(sp);
