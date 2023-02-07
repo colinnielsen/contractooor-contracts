@@ -26,9 +26,11 @@ contract ContractooorAgreement is Initializable {
         _disableInitializers();
     }
 
-    function initialize(Agreement calldata agreement) public initializer returns (uint256 streamId) {
-        // sablier = ISablier(_sablier);
-    }
+    function initialize(ISablier sablier, Agreement calldata _agreement)
+        public
+        initializer
+        returns (uint256 streamId)
+    {}
 }
 
 /**

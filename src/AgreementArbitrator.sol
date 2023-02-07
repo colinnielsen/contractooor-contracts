@@ -39,8 +39,9 @@ contract AgreementArbitrator {
     );
 
     event AgreementInitiated(
-        bytes32 agreementGUID,
-        address contractooorAgreement
+        bytes32 indexed agreementGUID,
+        address contractooorAgreement,
+        uint256 streamId
     );
 
     constructor(address _sablier, address _agreementSingleton) {
@@ -66,7 +67,7 @@ contract AgreementArbitrator {
     /// RES-B. If `msg.sender` is the second party to sign:
     ///     RES-B.1: delete the counterparty's leftover signature
     ///     RES-B.2: transfer `remainder` of tokens to the `provider` (this is to prevent rounding errors in the sablier stream)
-    ///     RES-B.3: send `totalStreamedTokens` - `remainder` of tokens to the stream contract
+    ///     RES-B.3: send `totalStreamedTokens` - `remainder` of tokens to the Contractooor contract
     ///     RES-B.4: create a new Contractooor agreement proxy clone
     ///     RES-B.5: call `initialize` on the new proxy clone
     ///     RES-B.6: emit an `AgreementInitiated` event with the `agreementGUID` and the Contractooor addresss
@@ -119,48 +120,53 @@ contract AgreementArbitrator {
             return;
         }
 
+        address singleton = address(agreementSingleton);
+        address agreement = singleton.predictDeterministicAddress(
+            agreementGUID
+        );
+
+        streamToken.safeTransferFrom(
+            receiver,
+            agreement,
+            totalStreamedTokens - (totalStreamedTokens % termLength)
+        );
+        streamToken.safeTransferFrom(
+            receiver,
+            provider,
+            totalStreamedTokens % termLength
+        );
+
         // if both parties agree:
         // cleanup their old agreement signature
         delete isAgreementSigned[agreementGUID][counterParty];
 
         // pull tokens
         // create a new agreement contract
-        address agreement = address(agreementSingleton).cloneDeterministic(
-            agreementGUID
-        );
+        singleton.cloneDeterministic(agreementGUID);
+
+        Agreement memory initData = Agreement({
+            provider: provider,
+            receiver: receiver,
+            atWillDays: terminationClauses.atWillDays,
+            cureTimeDays: terminationClauses.cureTimeDays,
+            legalCompulsion: terminationClauses.legalCompulsion,
+            counterpartyMalfeasance: terminationClauses.counterpartyMalfeasance,
+            bankruptcyDissolutionInsolvency: terminationClauses
+                .bankruptcyDissolutionInsolvency,
+            counterpartyLostControlOfPrivateKeys: terminationClauses
+                .counterpartyLostControlOfPrivateKeys,
+            scopeOfWorkURI: scopeOfWorkURI
+        });
 
         // initialize the agreement
-        ContractooorAgreement(agreement).initialize(
-            Agreement({
-                provider: provider,
-                receiver: receiver,
-                atWillDays: terminationClauses.atWillDays,
-                cureTimeDays: terminationClauses.cureTimeDays,
-                legalCompulsion: terminationClauses.legalCompulsion,
-                counterpartyMalfeasance: terminationClauses
-                    .counterpartyMalfeasance,
-                bankruptcyDissolutionInsolvency: terminationClauses
-                    .bankruptcyDissolutionInsolvency,
-                counterpartyLostControlOfPrivateKeys: terminationClauses
-                    .counterpartyLostControlOfPrivateKeys,
-                scopeOfWorkURI: scopeOfWorkURI
-            })
+        uint256 streamId = ContractooorAgreement(agreement).initialize(
+            sablier,
+            initData
         );
 
         // emit an agreement initiated event
-        emit AgreementInitiated(agreementGUID, agreement);
+        emit AgreementInitiated(agreementGUID, agreement, streamId);
     }
-
-    function _initiateAgreement(
-        uint256 agreementId,
-        address provider,
-        address receiver,
-        string calldata scopeOfWorkURI,
-        uint32 endTimestamp,
-        ERC20 streamToken,
-        uint256 totalStreamedTokens,
-        TerminationClauses calldata terminationClauses
-    ) internal {}
 }
 
 // bytes32 agreementUUID = keccak256(
