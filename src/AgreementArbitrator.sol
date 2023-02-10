@@ -2,11 +2,11 @@
 pragma solidity 0.8.17;
 
 import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
-import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
-import {ERC20} from "@solmate/tokens/ERC20.sol";
+import {IERC20} from "@openzeppelin/interfaces/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
+import {Clones} from "@openzeppelin/proxy/Clones.sol";
 import {TerminationClauses, Agreement} from "contracts/lib/Types.sol";
 import {ContractooorAgreement} from "contracts/ContractooorAgreement.sol";
-import {Clones} from "@openzeppelin/proxy/Clones.sol";
 
 import {console2} from "forge-std/console2.sol";
 
@@ -14,7 +14,7 @@ import {console2} from "forge-std/console2.sol";
 /// @author @colinnielsen
 /// @notice A light-weight agremement arbitrator for contractors and clients to create streaming contracts in exchange for services
 contract AgreementArbitrator {
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for IERC20;
     using Clones for address;
 
     ISablier public sablier;
@@ -33,16 +33,12 @@ contract AgreementArbitrator {
         address indexed receiver,
         string scopeOfWorkURI,
         uint32 targetEndTimestamp,
-        ERC20 streamToken,
+        address streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses terminationClauses
     );
 
-    event AgreementInitiated(
-        bytes32 indexed agreementGUID,
-        address contractooorAgreement,
-        uint256 streamId
-    );
+    event AgreementInitiated(bytes32 indexed agreementGUID, address contractooorAgreement, uint256 streamId);
 
     constructor(address _sablier, address _agreementSingleton) {
         sablier = ISablier(_sablier);
@@ -77,15 +73,12 @@ contract AgreementArbitrator {
         address receiver,
         string calldata scopeOfWorkURI,
         uint32 termLength,
-        ERC20 streamToken,
+        address streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) external {
         // TODO: What if they reeagree on the same agreement id after an agreement has been created?
-        if (msg.sender != provider && msg.sender != receiver) {
-            revert NOT_SENDER_OR_RECEIVER();
-        }
-        if (streamToken.decimals() < 4) revert INCOMPATIBLE_TOKEN();
+        if (msg.sender != provider && msg.sender != receiver) revert NOT_SENDER_OR_RECEIVER();
         if (termLength == 0) revert INVALID_TERM_LENGTH();
 
         bytes32 agreementGUID = keccak256(
@@ -105,6 +98,7 @@ contract AgreementArbitrator {
         // if the agreement has not been signed by the counter party, mark this party's approval and emit an event
         if (!isAgreementSigned[agreementGUID][counterParty]) {
             isAgreementSigned[agreementGUID][msg.sender] = true;
+            // if (IERC20(streamToken).decimals() < 4) revert INCOMPATIBLE_TOKEN();
 
             emit AgreementProposed(
                 agreementGUID,
@@ -116,33 +110,27 @@ contract AgreementArbitrator {
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
-            );
+                );
             return;
         }
-
-        address singleton = address(agreementSingleton);
-        address agreement = singleton.predictDeterministicAddress(
-            agreementGUID
-        );
-
-        streamToken.safeTransferFrom(
-            receiver,
-            agreement,
-            totalStreamedTokens - (totalStreamedTokens % termLength)
-        );
-        streamToken.safeTransferFrom(
-            receiver,
-            provider,
-            totalStreamedTokens % termLength
-        );
 
         // if both parties agree:
         // cleanup their old agreement signature
         delete isAgreementSigned[agreementGUID][counterParty];
 
+        address singleton = address(agreementSingleton);
+        address agreement = singleton.predictDeterministicAddress(agreementGUID);
+
+        // we want to transfer the tokens before deploying the contract because we want to avoid
+        //  having malicious tokens from reentering or tampering with our uninitialized stream contract
+        IERC20(streamToken).safeTransferFrom(receiver, provider, totalStreamedTokens % termLength);
+        IERC20(streamToken).safeTransferFrom(
+            receiver, agreement, totalStreamedTokens - (totalStreamedTokens % termLength)
+        );
+
         // pull tokens
         // create a new agreement contract
-        singleton.cloneDeterministic(agreementGUID);
+        assert(singleton.cloneDeterministic(agreementGUID) == agreement); //todo: remove asser
 
         Agreement memory initData = Agreement({
             provider: provider,
@@ -151,27 +139,20 @@ contract AgreementArbitrator {
             cureTimeDays: terminationClauses.cureTimeDays,
             legalCompulsion: terminationClauses.legalCompulsion,
             counterpartyMalfeasance: terminationClauses.counterpartyMalfeasance,
-            bankruptcyDissolutionInsolvency: terminationClauses
-                .bankruptcyDissolutionInsolvency,
-            counterpartyLostControlOfPrivateKeys: terminationClauses
-                .counterpartyLostControlOfPrivateKeys,
+            bankruptcyDissolutionInsolvency: terminationClauses.bankruptcyDissolutionInsolvency,
+            counterpartyLostControlOfPrivateKeys: terminationClauses.counterpartyLostControlOfPrivateKeys,
             scopeOfWorkURI: scopeOfWorkURI
         });
 
         // initialize the agreement
         uint256 streamId = ContractooorAgreement(agreement).initialize(
-            sablier,
-            initData
+            sablier, streamToken, totalStreamedTokens - (totalStreamedTokens % termLength), termLength, initData
         );
 
         // emit an agreement initiated event
         emit AgreementInitiated(agreementGUID, agreement, streamId);
     }
 }
-
-// bytes32 agreementUUID = keccak256(
-//     abi.encode(agreementId, provider, receiver)
-// );
 
 // uint256 remainingTokens = totalStreamedTokens %
 //     (endTimestamp - block.timestamp);
