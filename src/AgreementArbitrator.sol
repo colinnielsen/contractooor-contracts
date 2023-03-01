@@ -21,8 +21,8 @@ contract AgreementArbitrator {
     ContractooorAgreement private agreementSingleton;
     mapping(bytes32 => mapping(address => bool)) isAgreementSigned;
 
-    error NOT_RECEIVER();
-    error NOT_SENDER_OR_RECEIVER();
+    error NOT_CLIENT();
+    error NOT_SENDER_OR_CLIENT();
     error INCOMPATIBLE_TOKEN();
     error INVALID_TERM_LENGTH();
 
@@ -30,8 +30,8 @@ contract AgreementArbitrator {
         bytes32 indexed agreementGUID,
         uint256 agreementId,
         address indexed provider,
-        address indexed receiver,
-        string scopeOfWorkURI,
+        address indexed client,
+        string contractURI,
         uint32 targetEndTimestamp,
         address streamToken,
         uint256 totalStreamedTokens,
@@ -48,12 +48,12 @@ contract AgreementArbitrator {
     /// @notice a single function for parties to offer, counter-offer, and agree to a contract
     /// @dev takes the hash of all the parameters to make a agreementGUID, which is counter-signed, then used as salt for the contract deployment
     /// @notice SPEC:
-    /// A call to this function will prompt pull tokens from the service receiver, and create a stream of those tokens to the service provider given:
-    ///     A1. Either the `provider` or `receiver` have called this function with the exact same arguments - otherwise :: marks the agreement as signed
-    ///     A2. The `msg.sender` is the `provider` or `receiver` address
+    /// A call to this function will prompt pull tokens from the service client, and create a stream of those tokens to the service provider given:
+    ///     A1. Either the `provider` or `client` have called this function with the exact same arguments - otherwise :: marks the agreement as signed
+    ///     A2. The `msg.sender` is the `provider` or `client` address
     ///     A3. The `termLength` is not 0
     ///     A4. The `streamToken` has > 4 decimals, making it sablier compatible
-    ///     A5. If the agreement has already been counterparty signed, this contract must have `totalStreamedTokens` worth of operator approval from `receiver`
+    ///     A5. If the agreement has already been counterparty signed, this contract must have `totalStreamedTokens` worth of operator approval from `client`
     ///
     /// RES-A. If `msg.sender` is the first signing party:
     ///     RES-A.1: Mark the user's signature of the `agreementGUID` as true
@@ -70,30 +70,31 @@ contract AgreementArbitrator {
     function agreeTo(
         uint256 agreementId,
         address provider,
-        address receiver,
-        string calldata scopeOfWorkURI,
+        address client,
+        string calldata contractURI,
         uint32 termLength,
         address streamToken,
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) external {
         // TODO: What if they reeagree on the same agreement id after an agreement has been created?
-        if (msg.sender != provider && msg.sender != receiver) revert NOT_SENDER_OR_RECEIVER();
+        if (msg.sender != provider && msg.sender != client) revert NOT_SENDER_OR_CLIENT();
         if (termLength == 0) revert INVALID_TERM_LENGTH();
 
+        // include block.number
         bytes32 agreementGUID = keccak256(
             abi.encode(
                 agreementId,
                 provider,
-                receiver,
-                scopeOfWorkURI,
+                client,
+                contractURI,
                 termLength,
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
             )
         );
-        address counterParty = msg.sender == provider ? receiver : provider;
+        address counterParty = msg.sender == provider ? client : provider;
 
         // if the agreement has not been signed by the counter party, mark this party's approval and emit an event
         if (!isAgreementSigned[agreementGUID][counterParty]) {
@@ -104,8 +105,8 @@ contract AgreementArbitrator {
                 agreementGUID,
                 agreementId,
                 provider,
-                receiver,
-                scopeOfWorkURI,
+                client,
+                contractURI,
                 termLength,
                 streamToken,
                 totalStreamedTokens,
@@ -123,25 +124,26 @@ contract AgreementArbitrator {
 
         // we want to transfer the tokens before deploying the contract because we want to avoid
         //  having malicious tokens from reentering or tampering with our uninitialized stream contract
-        IERC20(streamToken).safeTransferFrom(receiver, provider, totalStreamedTokens % termLength);
+        IERC20(streamToken).safeTransferFrom(client, provider, totalStreamedTokens % termLength);
         IERC20(streamToken).safeTransferFrom(
-            receiver, agreement, totalStreamedTokens - (totalStreamedTokens % termLength)
+            client, agreement, totalStreamedTokens - (totalStreamedTokens % termLength)
         );
 
         // pull tokens
         // create a new agreement contract
-        assert(singleton.cloneDeterministic(agreementGUID) == agreement); //todo: remove asser
+        assert(singleton.cloneDeterministic(agreementGUID) == agreement); //todo: remove assert
 
         Agreement memory initData = Agreement({
             provider: provider,
-            receiver: receiver,
+            client: client,
             atWillDays: terminationClauses.atWillDays,
             cureTimeDays: terminationClauses.cureTimeDays,
             legalCompulsion: terminationClauses.legalCompulsion,
+            moralTurpitude: terminationClauses.moralTurpitude,
             counterpartyMalfeasance: terminationClauses.counterpartyMalfeasance,
             bankruptcyDissolutionInsolvency: terminationClauses.bankruptcyDissolutionInsolvency,
-            counterpartyLostControlOfPrivateKeys: terminationClauses.counterpartyLostControlOfPrivateKeys,
-            scopeOfWorkURI: scopeOfWorkURI
+            lostControlOfPrivateKeys: terminationClauses.lostControlOfPrivateKeys,
+            contractURI: contractURI
         });
 
         // initialize the agreement
@@ -158,7 +160,7 @@ contract AgreementArbitrator {
 //     (endTimestamp - block.timestamp);
 
 // streamToken.safeTransferFrom(
-//     receiver,
+//     client,
 //     address(this),
 //     totalStreamedTokens
 // );

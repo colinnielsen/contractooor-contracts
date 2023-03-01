@@ -3,15 +3,16 @@ pragma solidity 0.8.17;
 
 struct Agreement {
     address provider;
-    address receiver;
+    address client;
     uint16 atWillDays; // 0- many days
     uint16 cureTimeDays; // 0- many days
     // rage terminate clauses
     bool legalCompulsion;
-    bool counterpartyMalfeasance;
+    bool moralTurpitude;
     bool bankruptcyDissolutionInsolvency;
-    bool counterpartyLostControlOfPrivateKeys;
-    string scopeOfWorkURI;
+    bool counterpartyMalfeasance;
+    bool lostControlOfPrivateKeys;
+    string contractURI;
 }
 
 struct TerminationClauses {
@@ -19,7 +20,8 @@ struct TerminationClauses {
     uint16 cureTimeDays; // 0- many days
     // rage terminate clauses
     bool legalCompulsion;
-    bool counterpartyMalfeasance;
+    bool moralTurpitude;
     bool bankruptcyDissolutionInsolvency;
-    bool counterpartyLostControlOfPrivateKeys;
+    bool counterpartyMalfeasance;
+    bool lostControlOfPrivateKeys;
 }
