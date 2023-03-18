@@ -8,7 +8,7 @@ import {Clones} from "@openzeppelin/proxy/Clones.sol";
 import {TerminationClauses, Agreement} from "contracts/lib/Types.sol";
 import {ContractooorAgreement} from "contracts/ContractooorAgreement.sol";
 
-import {console2} from "forge-std/console2.sol";
+// import {console2} from "forge-std/console2.sol";
 
 /// @title AgreementArbitrator
 /// @author @colinnielsen
@@ -29,6 +29,7 @@ contract AgreementArbitrator {
     event AgreementProposed(
         bytes32 indexed agreementGUID,
         uint256 agreementId,
+        address proposer,
         address indexed provider,
         address indexed client,
         string contractURI,
@@ -38,7 +39,13 @@ contract AgreementArbitrator {
         TerminationClauses terminationClauses
     );
 
-    event AgreementInitiated(bytes32 indexed agreementGUID, address contractooorAgreement, uint256 streamId);
+    event AgreementInitiated(
+        uint256 agreementId,
+        address indexed provider,
+        address indexed client,
+        address contractooorAgreement,
+        uint256 streamId
+    );
 
     constructor(address _sablier, address _agreementSingleton) {
         sablier = ISablier(_sablier);
@@ -78,10 +85,10 @@ contract AgreementArbitrator {
         TerminationClauses calldata terminationClauses
     ) external {
         // TODO: What if they reeagree on the same agreement id after an agreement has been created?
-        if (msg.sender != provider && msg.sender != client) revert NOT_SENDER_OR_CLIENT();
+        if (msg.sender != provider && msg.sender != client)
+            revert NOT_SENDER_OR_CLIENT();
         if (termLength == 0) revert INVALID_TERM_LENGTH();
 
-        // include block.number
         bytes32 agreementGUID = keccak256(
             abi.encode(
                 agreementId,
@@ -104,6 +111,7 @@ contract AgreementArbitrator {
             emit AgreementProposed(
                 agreementGUID,
                 agreementId,
+                msg.sender,
                 provider,
                 client,
                 contractURI,
@@ -111,7 +119,7 @@ contract AgreementArbitrator {
                 streamToken,
                 totalStreamedTokens,
                 terminationClauses
-                );
+            );
             return;
         }
 
@@ -119,40 +127,64 @@ contract AgreementArbitrator {
         // cleanup their old agreement signature
         delete isAgreementSigned[agreementGUID][counterParty];
 
-        address singleton = address(agreementSingleton);
-        address agreement = singleton.predictDeterministicAddress(agreementGUID);
+        address agreement = address(agreementSingleton)
+            .predictDeterministicAddress(agreementGUID);
 
+        // pull tokens:
         // we want to transfer the tokens before deploying the contract because we want to avoid
         //  having malicious tokens from reentering or tampering with our uninitialized stream contract
-        IERC20(streamToken).safeTransferFrom(client, provider, totalStreamedTokens % termLength);
         IERC20(streamToken).safeTransferFrom(
-            client, agreement, totalStreamedTokens - (totalStreamedTokens % termLength)
+            client,
+            provider,
+            totalStreamedTokens % termLength
+        );
+        IERC20(streamToken).safeTransferFrom(
+            client,
+            agreement,
+            totalStreamedTokens - (totalStreamedTokens % termLength)
         );
 
-        // pull tokens
+        uint256 streamId;
+
         // create a new agreement contract
-        assert(singleton.cloneDeterministic(agreementGUID) == agreement); //todo: remove assert
+        {
+            address(agreementSingleton).cloneDeterministic(agreementGUID);
+            Agreement memory initData = Agreement({
+                provider: provider,
+                client: client,
+                atWillDays: terminationClauses.atWillDays,
+                cureTimeDays: terminationClauses.cureTimeDays,
+                legalCompulsion: terminationClauses.legalCompulsion,
+                moralTurpitude: terminationClauses.moralTurpitude,
+                counterpartyMalfeasance: terminationClauses
+                    .counterpartyMalfeasance,
+                bankruptcyDissolutionInsolvency: terminationClauses
+                    .bankruptcyDissolutionInsolvency,
+                lostControlOfPrivateKeys: terminationClauses
+                    .lostControlOfPrivateKeys,
+                contractURI: contractURI
+            });
 
-        Agreement memory initData = Agreement({
-            provider: provider,
-            client: client,
-            atWillDays: terminationClauses.atWillDays,
-            cureTimeDays: terminationClauses.cureTimeDays,
-            legalCompulsion: terminationClauses.legalCompulsion,
-            moralTurpitude: terminationClauses.moralTurpitude,
-            counterpartyMalfeasance: terminationClauses.counterpartyMalfeasance,
-            bankruptcyDissolutionInsolvency: terminationClauses.bankruptcyDissolutionInsolvency,
-            lostControlOfPrivateKeys: terminationClauses.lostControlOfPrivateKeys,
-            contractURI: contractURI
-        });
-
-        // initialize the agreement
-        uint256 streamId = ContractooorAgreement(agreement).initialize(
-            sablier, streamToken, totalStreamedTokens - (totalStreamedTokens % termLength), termLength, initData
-        );
+            uint256 tokensToStream = totalStreamedTokens -
+                (totalStreamedTokens % termLength);
+            // initialize the agreement
+            streamId = ContractooorAgreement(agreement).initialize(
+                sablier,
+                streamToken,
+                tokensToStream,
+                termLength,
+                initData
+            );
+        }
 
         // emit an agreement initiated event
-        emit AgreementInitiated(agreementGUID, agreement, streamId);
+        emit AgreementInitiated(
+            agreementId,
+            provider,
+            client,
+            agreement,
+            streamId
+        );
     }
 }
 
