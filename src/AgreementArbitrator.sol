@@ -19,7 +19,7 @@ contract AgreementArbitrator {
 
     ISablier public sablier;
     ContractooorAgreement private agreementSingleton;
-    mapping(bytes32 => mapping(address => bool)) isAgreementSigned;
+    mapping(bytes32 => bytes32) agreementSignature;
 
     error NOT_CLIENT();
     error NOT_SENDER_OR_CLIENT();
@@ -27,8 +27,8 @@ contract AgreementArbitrator {
     error INVALID_TERM_LENGTH();
 
     event AgreementProposed(
-        bytes32 indexed agreementGUID,
-        uint256 agreementId,
+        bytes32 indexed agreementHash,
+        uint256 agreementNonce,
         address proposer,
         address indexed provider,
         address indexed client,
@@ -40,7 +40,7 @@ contract AgreementArbitrator {
     );
 
     event AgreementInitiated(
-        uint256 agreementId,
+        uint256 agreementNonce,
         address indexed provider,
         address indexed client,
         address contractooorAgreement,
@@ -75,7 +75,7 @@ contract AgreementArbitrator {
     ///     RES-B.5: call `initialize` on the new proxy clone
     ///     RES-B.6: emit an `AgreementInitiated` event with the `agreementGUID` and the Contractooor addresss
     function agreeTo(
-        uint256 agreementId,
+        uint256 agreementNonce,
         address provider,
         address client,
         string calldata contractURI,
@@ -84,33 +84,48 @@ contract AgreementArbitrator {
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) external {
-        // TODO: What if they reeagree on the same agreement id after an agreement has been created?
         if (msg.sender != provider && msg.sender != client)
             revert NOT_SENDER_OR_CLIENT();
         if (termLength == 0) revert INVALID_TERM_LENGTH();
 
-        bytes32 agreementGUID = keccak256(
-            abi.encode(
-                agreementId,
-                provider,
-                client,
-                contractURI,
-                termLength,
-                streamToken,
-                totalStreamedTokens,
-                terminationClauses
-            )
+        bytes32 agreementId = keccak256(
+            abi.encode(agreementNonce, provider, client)
         );
+
         address counterParty = msg.sender == provider ? client : provider;
 
         // if the agreement has not been signed by the counter party, mark this party's approval and emit an event
-        if (!isAgreementSigned[agreementGUID][counterParty]) {
-            isAgreementSigned[agreementGUID][msg.sender] = true;
-            // if (IERC20(streamToken).decimals() < 4) revert INCOMPATIBLE_TOKEN();
+        if (
+            agreementSignature[agreementId] !=
+            getAgreementHash({
+                signingParty: counterParty,
+                agreementNonce: agreementNonce,
+                provider: provider,
+                client: client,
+                contractURI: contractURI,
+                termLength: termLength,
+                streamToken: streamToken,
+                totalStreamedTokens: totalStreamedTokens,
+                terminationClauses: terminationClauses
+            })
+        ) {
+            bytes32 userAgreementHash = getAgreementHash({
+                signingParty: msg.sender,
+                agreementNonce: agreementNonce,
+                provider: provider,
+                client: client,
+                contractURI: contractURI,
+                termLength: termLength,
+                streamToken: streamToken,
+                totalStreamedTokens: totalStreamedTokens,
+                terminationClauses: terminationClauses
+            });
+
+            agreementSignature[agreementId] = userAgreementHash;
 
             emit AgreementProposed(
-                agreementGUID,
-                agreementId,
+                userAgreementHash,
+                agreementNonce,
                 msg.sender,
                 provider,
                 client,
@@ -124,11 +139,9 @@ contract AgreementArbitrator {
         }
 
         // if both parties agree:
-        // cleanup their old agreement signature
-        delete isAgreementSigned[agreementGUID][counterParty];
 
-        address agreement = address(agreementSingleton)
-            .predictDeterministicAddress(agreementGUID);
+        address contractooorAgreement = address(agreementSingleton)
+            .predictDeterministicAddress(agreementId);
 
         // pull tokens:
         // we want to transfer the tokens before deploying the contract because we want to avoid
@@ -140,15 +153,17 @@ contract AgreementArbitrator {
         );
         IERC20(streamToken).safeTransferFrom(
             client,
-            agreement,
+            contractooorAgreement,
+            // this pattern is a nuance of sablier v1.
+            //  The total stream length must fit evenly into the total tokens streamed
             totalStreamedTokens - (totalStreamedTokens % termLength)
         );
 
         uint256 streamId;
 
-        // create a new agreement contract
+        // create a new contractooorAgreement contract
         {
-            address(agreementSingleton).cloneDeterministic(agreementGUID);
+            address(agreementSingleton).cloneDeterministic(agreementId);
             Agreement memory initData = Agreement({
                 provider: provider,
                 client: client,
@@ -167,8 +182,8 @@ contract AgreementArbitrator {
 
             uint256 tokensToStream = totalStreamedTokens -
                 (totalStreamedTokens % termLength);
-            // initialize the agreement
-            streamId = ContractooorAgreement(agreement).initialize(
+            // initialize the contractooorAgreement
+            streamId = ContractooorAgreement(contractooorAgreement).initialize(
                 sablier,
                 streamToken,
                 tokensToStream,
@@ -177,37 +192,43 @@ contract AgreementArbitrator {
             );
         }
 
-        // emit an agreement initiated event
+        // emit an contractooorAgreement initiated event
         emit AgreementInitiated(
-            agreementId,
+            agreementNonce,
             provider,
             client,
-            agreement,
+            contractooorAgreement,
             streamId
         );
     }
+
+    function getAgreementHash(
+        address signingParty,
+        uint256 agreementNonce,
+        address provider,
+        address client,
+        string calldata contractURI,
+        uint32 termLength,
+        address streamToken,
+        uint256 totalStreamedTokens,
+        TerminationClauses calldata terminationClauses
+    ) public pure returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    signingParty,
+                    agreementNonce,
+                    provider,
+                    client,
+                    contractURI,
+                    termLength,
+                    streamToken,
+                    totalStreamedTokens,
+                    terminationClauses
+                )
+            );
+    }
 }
-
-// uint256 remainingTokens = totalStreamedTokens %
-//     (endTimestamp - block.timestamp);
-
-// streamToken.safeTransferFrom(
-//     client,
-//     address(this),
-//     totalStreamedTokens
-// );
-// streamToken.safeTransfer(provider, remainingTokens);
-// streamToken.approve(
-//     address(sablier),
-//     totalStreamedTokens - remainingTokens
-// );
-// uint256 streamId = sablier.createStream({
-//     recipient: provider,
-//     deposit: totalStreamedTokens - remainingTokens,
-//     tokenAddress: address(streamToken),
-//     startTime: block.timestamp,
-//     stopTime: endTimestamp
-// });
 
 /**
  * - DAO: legal entity name, type, and jurisdiction
