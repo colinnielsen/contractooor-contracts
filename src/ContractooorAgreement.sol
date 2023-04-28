@@ -111,16 +111,44 @@ contract ContractooorAgreement is Initializable {
         streamId = uint96(_streamId);
     }
 
-    function terminateByMutualConsent(string memory ipfsHash) public {
+    ///
+    /// MUTUAL CONSENT TERMINATION
+    ///
+
+    /// @notice allows a party to propose a termination by mutual consent
+    /// @notice a party can pass a terminationInfo (an IPFS hash, a URL, an emoji) to provide context for the termination proposal.
+    ///       the counter party must pass in the same terminationInfo as acknowledgement of the termination reason
+    /// @notice SPEC:
+    /// A valid call to this function will do either of the following:
+    ///     I: Allows either the service provider or the client to initiate a termination
+    ///     E: Allows either the service provider or the client to execute a termination if the other party has already initiated
+    ///
+    ///     I: Either party can initiate given:
+    ///     I1. The msg.sender is either the client or the service provider -> otherwise, reverts
+    ///     I2. The keccak256 hash of the `terminationProposalURI` and the other party's address has not previously been stored in `mutualConsentTerminationId`
+    ///
+    ///     RESI: given the above, this function will:
+    ///     RESI-1. Store the keccak256 hash of the `terminationProposalURI` and the msg.sender's address in `mutualConsentTerminationId`
+    ///     RESI-2. Emit a `TerminationProposed` event
+
+    ///     E: Either party can execute given:
+    ///     E1. The msg.sender is either the client or the service provider -> otherwise, reverts
+    ///     E2. The keccak256 hash of the `terminationProposalURI` and the other party's address has previously been stored in `mutualConsentTerminationId`
+    ///
+    ///     RESI: given the above, this function will:
+    ///     RESI-1. Call `_terminateAgreement`
+    ///
+    function terminateByMutualConsent(string memory terminationInfo) public {
         address otherParty = onlyClientOrServiceProvider();
         bytes32 mutualConsentCancellationHash = keccak256(
-            abi.encode(ipfsHash, otherParty)
+            abi.encode(terminationInfo, otherParty)
         );
-        if (mutualConsentCancellationHash == mutualConsentTerminationId) {
+
+        if (mutualConsentTerminationId == mutualConsentCancellationHash) {
             _terminateAgreement();
         } else {
             mutualConsentTerminationId = keccak256(
-                abi.encode(ipfsHash, msg.sender)
+                abi.encode(terminationInfo, msg.sender)
             );
         }
     }
