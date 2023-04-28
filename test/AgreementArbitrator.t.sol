@@ -15,8 +15,8 @@ contract Tests is Test {
     ERC20Mock token;
     AgreementArbitrator arbitrator;
 
-    address sp = address(0x1);
-    address sr = address(0x2);
+    address serviceProvider = address(0x1);
+    address client = address(0x2);
 
     function setUp() public {
         sablier = new SablierMock();
@@ -28,8 +28,8 @@ contract Tests is Test {
             address(agreementSingleton)
         );
 
-        vm.label(sp, "SERVICE PROVIDER");
-        vm.label(sr, "SERVICE RECEIVER");
+        vm.label(serviceProvider, "SERVICE PROVIDER");
+        vm.label(client, "SERVICE RECEIVER");
     }
 
     function test_initiateAgreement(uint256 agreementAmount) public {
@@ -41,16 +41,16 @@ contract Tests is Test {
         uint256 timestamp = 1674941221;
         vm.warp(timestamp);
 
-        token.mint(sr, agreementAmount);
+        token.mint(client, agreementAmount);
 
-        vm.prank(sr);
+        vm.prank(client);
         token.approve(address(arbitrator), agreementAmount);
 
-        vm.prank(sp);
+        vm.prank(serviceProvider);
         arbitrator.agreeTo(
             1,
-            sp,
-            sr,
+            serviceProvider,
+            client,
             "https://example.com",
             TERM_LENGTH,
             address(token),
@@ -58,11 +58,11 @@ contract Tests is Test {
             TerminationClauses(0, 0, false, false, false, false, false)
         );
 
-        vm.prank(sr);
+        vm.prank(client);
         arbitrator.agreeTo(
             1,
-            sp,
-            sr,
+            serviceProvider,
+            client,
             "https://example.com",
             TERM_LENGTH,
             address(token),
@@ -84,22 +84,22 @@ contract Tests is Test {
         ) = sablier.getStream(100000);
 
         // assertEq(sender, address(arbitrator), "sender");
-        assertEq(recipient, sp, "recipient");
+        assertEq(recipient, serviceProvider, "recipient");
         assertEq(deposit, agreementAmount - leftOvertokens, "agreementAmount");
         assertEq(startTime, block.timestamp, "startTime");
         assertEq(stopTime, block.timestamp + TERM_LENGTH, "stopTime");
         assertEq(tokenAddress, address(token));
         assertEq(
-            token.balanceOf(address(sp)),
+            token.balanceOf(address(serviceProvider)),
             leftOvertokens,
             "initial deposit"
         );
 
         vm.warp(block.timestamp + TERM_LENGTH);
-        vm.prank(sp);
+        vm.prank(serviceProvider);
         sablier.withdrawFromStream(100000, agreementAmount - leftOvertokens);
         assertEq(
-            token.balanceOf(address(sp)),
+            token.balanceOf(address(serviceProvider)),
             agreementAmount,
             "final deposit"
         );
