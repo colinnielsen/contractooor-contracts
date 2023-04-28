@@ -23,14 +23,16 @@ contract ContractooorAgreement is Initializable {
     error NOT_AUTHORIZED();
     error INCOMPATIBLE_TOKEN();
     error INVALID_END_TIME();
+    error INVALID_CURE_TIME();
     error STREAM_CANCELLATION_FAILED();
-˝˝
+
     AgreementArbitrator private arbitrator;
     ISablier private sablier;
     uint96 public streamId;
     Agreement public agreement;
 
     bytes32 public mutualConsentTerminationId;
+    mapping(address => uint256) public atWillTerminationTimestamp;
 
     constructor() {
         _disableInitializers();
@@ -153,6 +155,32 @@ contract ContractooorAgreement is Initializable {
         }
     }
 
+    ///
+    /// AT WILL TERMINATION
+    ///
+
+    function issueNoticeOfTermination(string memory terminationInfo) public {
+        onlyClientOrServiceProvider();
+        atWillTerminationTimestamp[msg.sender] = block.timestamp;
+        // TODO: emit event
+    }
+
+    function terminateAtWill() public {
+        onlyClientOrServiceProvider();
+        uint256 terminationProposalTimestamp = atWillTerminationTimestamp[
+            msg.sender
+        ];
+        if (
+            terminationProposalTimestamp == 0 ||
+            block.timestamp <
+            terminationProposalTimestamp + agreement.atWillDays
+        ) {
+            revert INVALID_CURE_TIME();
+        }
+
+        _terminateAgreement();
+    }
+
     // cancel the stream and transfer unspent tokens back to the client
     //   (sablier handles the refund of the service provider, who is the recipient)
     function _terminateAgreement() internal {
@@ -161,8 +189,7 @@ contract ContractooorAgreement is Initializable {
         bool cancelled = sablier.cancelStream(streamId);
         if (!cancelled) revert STREAM_CANCELLATION_FAILED();
 
-        IERC20(streamToken).safeTransferFrom(
-            address(this),
+        IERC20(streamToken).safeTransfer(
             agreement.client,
             IERC20(streamToken).balanceOf(address(this))
         );
