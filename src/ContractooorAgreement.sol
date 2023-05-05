@@ -17,7 +17,7 @@ contract ContractooorAgreement is Initializable {
     using SafeERC20 for IERC20;
 
     error NOT_RECEIVER();
-    error NOT_SENDER_OR_RECEIVER();
+    error NOT_CLIENT_OR_SERVICE_PROVIDER();
     error NOT_CLIENT();
     error NOT_SERVICE_PROVIDER();
     error NOT_AUTHORIZED();
@@ -62,7 +62,7 @@ contract ContractooorAgreement is Initializable {
         Agreement memory _agreement = agreement;
         if (
             msg.sender != _agreement.client && msg.sender != _agreement.provider
-        ) revert NOT_SENDER_OR_RECEIVER();
+        ) revert NOT_CLIENT_OR_SERVICE_PROVIDER();
         otherParty = msg.sender == _agreement.client
             ? _agreement.provider
             : _agreement.client;
@@ -173,7 +173,8 @@ contract ContractooorAgreement is Initializable {
         if (
             terminationProposalTimestamp == 0 ||
             block.timestamp <
-            terminationProposalTimestamp + agreement.atWillDays
+            terminationProposalTimestamp +
+                (uint256(agreement.atWillDays) * 1 days)
         ) {
             revert INVALID_CURE_TIME();
         }

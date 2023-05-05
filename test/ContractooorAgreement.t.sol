@@ -80,7 +80,15 @@ contract Tests is Test {
         return
             _initiateAgreement(
                 1 ether,
-                TerminationClauses(0, 0, false, false, false, false, false)
+                TerminationClauses({
+                    atWillDays: 0,
+                    cureTimeDays: 0,
+                    legalCompulsion: false,
+                    moralTurpitude: false,
+                    bankruptcyDissolutionInsolvency: false,
+                    counterpartyMalfeasance: false,
+                    lostControlOfPrivateKeys: false
+                })
             );
     }
 
@@ -99,4 +107,94 @@ contract Tests is Test {
         vm.expectRevert();
         sablier.getStream(100000);
     }
+
+    function test_nonPartiesCannotTerminateMutualConsent(address party) public {
+        vm.assume(party != serviceProvider && party != client);
+
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement()
+        );
+
+        vm.prank(party);
+
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
+        agreement.terminateByMutualConsent("l8r");
+
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
+        agreement.issueNoticeOfTermination("l8r");
+    }
+
+    function test_atWillTerminate(uint8 daysToWait, bool useClient) public {
+        address party = useClient ? client : serviceProvider;
+        uint256 timestamp = 1674941221;
+        vm.warp(timestamp);
+
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: daysToWait,
+                    cureTimeDays: 0,
+                    legalCompulsion: false,
+                    moralTurpitude: false,
+                    bankruptcyDissolutionInsolvency: false,
+                    counterpartyMalfeasance: false,
+                    lostControlOfPrivateKeys: false
+                })
+            )
+        );
+
+        vm.prank(party);
+        agreement.issueNoticeOfTermination("l8r");
+
+        vm.warp(timestamp + ((uint256(daysToWait) + 1) * 1 days));
+
+        vm.prank(party);
+        agreement.terminateAtWill();
+
+        // stream does not exist
+        vm.expectRevert();
+        sablier.getStream(100000);
+    }
+
+    function test_nonPartiesCannotTerminateAtWill(address party) public {
+        vm.assume(party != serviceProvider && party != client);
+
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: 1,
+                    cureTimeDays: 0,
+                    legalCompulsion: false,
+                    moralTurpitude: false,
+                    bankruptcyDissolutionInsolvency: false,
+                    counterpartyMalfeasance: false,
+                    lostControlOfPrivateKeys: false
+                })
+            )
+        );
+
+        vm.prank(party);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
+        agreement.issueNoticeOfTermination("l8r");
+
+        vm.prank(client);
+        agreement.issueNoticeOfTermination("l8r");
+        vm.warp(10 days);
+
+        vm.prank(party);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
+        agreement.terminateAtWill();
+    }
+
+    function test_usersGetFundsBackIfStreamCancelled() public {}
 }
