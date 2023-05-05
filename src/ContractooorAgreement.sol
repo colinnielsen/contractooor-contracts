@@ -10,6 +10,8 @@ import {AgreementArbitrator} from "contracts/AgreementArbitrator.sol";
 
 import {console2} from "forge-std/console2.sol";
 
+uint256 constant MAX_BREACH_ALLOWANCE = 3;
+
 /// @title ContractooorAgreement
 /// @author @colinnielsen
 /// @notice Arbitrates agremements between a service provider and a client
@@ -21,9 +23,10 @@ contract ContractooorAgreement is Initializable {
     error NOT_CLIENT();
     error NOT_SERVICE_PROVIDER();
     error NOT_AUTHORIZED();
+    error NO_BREACH_NOTICE_ISSUED();
     error INCOMPATIBLE_TOKEN();
     error INVALID_END_TIME();
-    error INVALID_CURE_TIME();
+    error CURE_TIME_NOT_MET();
     error RAGE_TERMINATION_NOT_ALLOWED();
     error STREAM_CANCELLATION_FAILED();
 
@@ -34,6 +37,8 @@ contract ContractooorAgreement is Initializable {
 
     bytes32 public mutualConsentTerminationId;
     mapping(address => uint256) public atWillTerminationTimestamp;
+    mapping(address => uint256) public materialBreachTimestamp;
+    uint256 public timesContractBreeched;
 
     constructor() {
         _disableInitializers();
@@ -157,6 +162,53 @@ contract ContractooorAgreement is Initializable {
     }
 
     ///
+    /// MATERIAL BREACH
+    ///
+
+    function issueNoticeOfMaterialBreach(string memory breachInfo) public {
+        // QUESTIONS;
+        // 1. should either party be able to override their previous notice?
+        // 2. should the counterParty be able to issue a notice, if the other party has already issued a notice?
+        address counterParty = onlyClientOrServiceProvider();
+        materialBreachTimestamp[msg.sender] = block.timestamp;
+
+        // TODO emit event
+    }
+
+    function withdrawNoticeOfMaterialBreach() public {
+        onlyClientOrServiceProvider();
+        delete materialBreachTimestamp[msg.sender];
+
+        // TODO emit event
+    }
+
+    function issueNoticeOfCure(string memory cureInfo) public {
+        address counterParty = onlyClientOrServiceProvider();
+        uint256 timestamp = materialBreachTimestamp[counterParty];
+
+        if (timestamp == 0) revert NO_BREACH_NOTICE_ISSUED();
+
+        delete materialBreachTimestamp[counterParty];
+        timesContractBreeched++;
+
+        // TODO emit event
+    }
+
+    function terminateByMaterialBreach() public {
+        onlyClientOrServiceProvider();
+
+        uint256 issueTimestamp = materialBreachTimestamp[msg.sender];
+        bool curetimeReached = issueTimestamp != 0 &&
+            block.timestamp >
+            issueTimestamp + (uint256(agreement.cureTimeDays) * 1 days);
+
+        if (!curetimeReached || timesContractBreeched < MAX_BREACH_ALLOWANCE)
+            revert CURE_TIME_NOT_MET();
+
+        _terminateAgreement();
+    }
+
+    ///
     /// AT WILL TERMINATION
     ///
 
@@ -177,7 +229,7 @@ contract ContractooorAgreement is Initializable {
             terminationProposalTimestamp +
                 (uint256(agreement.atWillDays) * 1 days)
         ) {
-            revert INVALID_CURE_TIME();
+            revert CURE_TIME_NOT_MET();
         }
 
         _terminateAgreement();
@@ -202,7 +254,10 @@ contract ContractooorAgreement is Initializable {
     /// RAGE TERMINATION
     ///
 
-    function rageTerminate(TerminationReason reason, string memory terminationInfo) public {
+    function rageTerminate(
+        TerminationReason reason,
+        string memory terminationInfo
+    ) public {
         onlyClientOrServiceProvider();
         Agreement memory _agreement = agreement;
 
@@ -226,21 +281,3 @@ contract ContractooorAgreement is Initializable {
         _terminateAgreement();
     }
 }
-
-/**
- * - DAO: legal entity name, type, and jurisdiction
- *     - SP: legal entity name, type, jurisdiction
- *     - SP's counterparty for agreement address
- *     - agreement scope of work
- *     - term length
- *     - stream token
- *     - total tokens streamed over term
- *     - [x] at will (n amount of days) (optional)
- *     - [x] mutual consent (always enabled)
- *     - [x] material breach (always enabled) (n amount of days to cure breach)
- *     - rage terminate (optional, select from choices below)
- * legal compulsion
- * counterparty malfeasance (indictment, fraud, sanctions, crimes of moral turpitude)
- * bankruptcy, dissolution, insolvency, loss of necessary license/certification
- * counterparty lost exclusive control over private keys
- */
