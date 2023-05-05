@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
+enum TerminationReason {
+    LegalCompulsion,
+    CrimesOfMoralTurpitude,
+    Bankruptcy,
+    Dissolution,
+    Insolvency,
+    CounterPartyMalfeasance,
+    LossControlOfPrivateKeys
+}
+
 struct Agreement {
     address provider;
     address client;

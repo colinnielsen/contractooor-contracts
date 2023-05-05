@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import {ERC20} from "@solmate/test/utils/mocks/MockERC20.sol";
 import {ERC20Mock} from "@openzeppelin/mocks/ERC20Mock.sol";
-import {TerminationClauses, Agreement} from "contracts/lib/Types.sol";
+import {TerminationClauses, Agreement, TerminationReason} from "contracts/lib/Types.sol";
 import {AgreementArbitrator} from "src/AgreementArbitrator.sol";
 import {ContractooorAgreement} from "src/ContractooorAgreement.sol";
 
@@ -194,6 +194,156 @@ contract Tests is Test {
             ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
         );
         agreement.terminateAtWill();
+    }
+
+    function test_rageTerminate(uint8 _reason, bool useClient) public {
+        address party = useClient ? client : serviceProvider;
+        TerminationReason reason = TerminationReason(_reason % 7);
+
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: 0,
+                    cureTimeDays: 0,
+                    legalCompulsion: true,
+                    moralTurpitude: true,
+                    bankruptcyDissolutionInsolvency: true,
+                    counterpartyMalfeasance: true,
+                    lostControlOfPrivateKeys: true
+                })
+            )
+        );
+
+        vm.prank(party);
+        agreement.rageTerminate(reason, "bye");
+    }
+
+    function test_cannotRageTerminateAsOtherParty(
+        uint8 _reason,
+        address party
+    ) public {
+        vm.assume(party != serviceProvider && party != client);
+        TerminationReason reason = TerminationReason(_reason % 7);
+
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: 0,
+                    cureTimeDays: 0,
+                    legalCompulsion: true,
+                    moralTurpitude: true,
+                    bankruptcyDissolutionInsolvency: true,
+                    counterpartyMalfeasance: true,
+                    lostControlOfPrivateKeys: true
+                })
+            )
+        );
+
+        vm.prank(party);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
+        agreement.rageTerminate(reason, "bye");
+    }
+
+    function test_cannotRageTerminateDisallowedValues(
+        bool legalCompulsion,
+        bool moralTurpitude,
+        bool bankruptcyDissolutionInsolvency,
+        bool counterpartyMalfeasance,
+        bool lostControlOfPrivateKeys
+    ) public {
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: 0,
+                    cureTimeDays: 0,
+                    legalCompulsion: legalCompulsion,
+                    moralTurpitude: moralTurpitude,
+                    bankruptcyDissolutionInsolvency: bankruptcyDissolutionInsolvency,
+                    counterpartyMalfeasance: counterpartyMalfeasance,
+                    lostControlOfPrivateKeys: lostControlOfPrivateKeys
+                })
+            )
+        );
+
+        bytes4 revertMsg = ContractooorAgreement
+            .RAGE_TERMINATION_NOT_ALLOWED
+            .selector;
+
+        vm.startPrank(client);
+
+        if (!legalCompulsion) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(TerminationReason.LegalCompulsion, "bye");
+        } else {
+            agreement.rageTerminate(TerminationReason.LegalCompulsion, "bye");
+            return;
+        }
+
+        if (!moralTurpitude) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(
+                TerminationReason.CrimesOfMoralTurpitude,
+                "bye"
+            );
+        } else {
+            agreement.rageTerminate(
+                TerminationReason.CrimesOfMoralTurpitude,
+                "bye"
+            );
+            return;
+        }
+        if (!bankruptcyDissolutionInsolvency) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(TerminationReason.Bankruptcy, "bye");
+        } else {
+            agreement.rageTerminate(TerminationReason.Bankruptcy, "bye");
+            return;
+        }
+        if (!bankruptcyDissolutionInsolvency) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(TerminationReason.Dissolution, "bye");
+        } else {
+            agreement.rageTerminate(TerminationReason.Dissolution, "bye");
+            return;
+        }
+        if (!bankruptcyDissolutionInsolvency) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(TerminationReason.Insolvency, "bye");
+        } else {
+            agreement.rageTerminate(TerminationReason.Insolvency, "bye");
+            return;
+        }
+        if (!counterpartyMalfeasance) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(
+                TerminationReason.CounterPartyMalfeasance,
+                "bye"
+            );
+        } else {
+            agreement.rageTerminate(
+                TerminationReason.CounterPartyMalfeasance,
+                "bye"
+            );
+            return;
+        }
+        if (!lostControlOfPrivateKeys) {
+            vm.expectRevert(revertMsg);
+            agreement.rageTerminate(
+                TerminationReason.LossControlOfPrivateKeys,
+                "bye"
+            );
+        } else {
+            agreement.rageTerminate(
+                TerminationReason.LossControlOfPrivateKeys,
+                "bye"
+            );
+            return;
+        }
     }
 
     function test_usersGetFundsBackIfStreamCancelled() public {}

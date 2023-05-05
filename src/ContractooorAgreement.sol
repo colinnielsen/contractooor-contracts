@@ -5,7 +5,7 @@ import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
 import {Initializable} from "@openzeppelin/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
-import {TerminationClauses, Agreement} from "contracts/lib/Types.sol";
+import {TerminationClauses, Agreement, TerminationReason} from "contracts/lib/Types.sol";
 import {AgreementArbitrator} from "contracts/AgreementArbitrator.sol";
 
 import {console2} from "forge-std/console2.sol";
@@ -24,6 +24,7 @@ contract ContractooorAgreement is Initializable {
     error INCOMPATIBLE_TOKEN();
     error INVALID_END_TIME();
     error INVALID_CURE_TIME();
+    error RAGE_TERMINATION_NOT_ALLOWED();
     error STREAM_CANCELLATION_FAILED();
 
     AgreementArbitrator private arbitrator;
@@ -194,6 +195,35 @@ contract ContractooorAgreement is Initializable {
             agreement.client,
             IERC20(streamToken).balanceOf(address(this))
         );
+        // TODO emit event
+    }
+
+    ///
+    /// RAGE TERMINATION
+    ///
+
+    function rageTerminate(TerminationReason reason, string memory terminationInfo) public {
+        onlyClientOrServiceProvider();
+        Agreement memory _agreement = agreement;
+
+        if (
+            (reason == TerminationReason.LegalCompulsion &&
+                !_agreement.legalCompulsion) ||
+            (reason == TerminationReason.CrimesOfMoralTurpitude &&
+                !_agreement.moralTurpitude) ||
+            (reason == TerminationReason.Bankruptcy &&
+                !_agreement.bankruptcyDissolutionInsolvency) ||
+            (reason == TerminationReason.Dissolution &&
+                !_agreement.bankruptcyDissolutionInsolvency) ||
+            (reason == TerminationReason.Insolvency &&
+                !_agreement.bankruptcyDissolutionInsolvency) ||
+            (reason == TerminationReason.CounterPartyMalfeasance &&
+                !_agreement.counterpartyMalfeasance) ||
+            (reason == TerminationReason.LossControlOfPrivateKeys &&
+                !_agreement.lostControlOfPrivateKeys)
+        ) revert RAGE_TERMINATION_NOT_ALLOWED();
+
+        _terminateAgreement();
     }
 }
 
