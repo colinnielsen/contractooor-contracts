@@ -150,6 +150,8 @@ contract Tests is Test {
         sablier.getStream(100000);
     }
 
+    function test_bothPartiesCanTerminateAtWill() public {}
+
     function test_nonPartiesCannotTerminateAtWill(address party) public {
         vm.assume(party != serviceProvider && party != client);
 
@@ -181,6 +183,14 @@ contract Tests is Test {
         agreement.terminateAtWill();
     }
 
+    function test_bothPartiesCanTerminateByMutualConsent() public {}
+
+    function test_materialBreach() public {}
+
+    function test_noPartiesCannotTerminateByMaterialBreach() public {}
+
+    function test_bothPartiesCanTerminateByMaterialBreach() public {}
+
     function test_rageTerminate(uint8 _reason, bool useClient) public {
         address party = useClient ? client : serviceProvider;
         TerminationReason reason = TerminationReason(_reason % 10);
@@ -201,7 +211,9 @@ contract Tests is Test {
         );
 
         vm.prank(party);
-        if (uint256(reason) < 3) vm.expectRevert(ContractooorAgreement.RAGE_TERMINATION_NOT_ALLOWED.selector);
+        if (uint256(reason) < 3) {
+            vm.expectRevert(ContractooorAgreement.RAGE_TERMINATION_NOT_ALLOWED.selector);
+        }
         agreement.rageTerminate(reason, "bye");
     }
 
