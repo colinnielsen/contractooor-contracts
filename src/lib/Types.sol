@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity ^0.8.0;
 
-enum TerminationReason {
+enum TerminationReason
+// Default Reasons
+{
+    MutualConsent,
+    MaterialBreach,
+    AtWill,
+    // Rage Termination Options
     LegalCompulsion,
     CrimesOfMoralTurpitude,
     Bankruptcy,

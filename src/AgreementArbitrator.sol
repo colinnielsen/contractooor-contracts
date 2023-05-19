@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity ^0.8.0;
 
 import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
 import {IERC20} from "@openzeppelin/interfaces/IERC20.sol";
@@ -7,8 +7,6 @@ import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
 import {Clones} from "@openzeppelin/proxy/Clones.sol";
 import {TerminationClauses, Agreement} from "contracts/lib/Types.sol";
 import {ContractooorAgreement} from "contracts/ContractooorAgreement.sol";
-
-// import {console2} from "forge-std/console2.sol";
 
 /// @title AgreementArbitrator
 /// @author @colinnielsen
@@ -84,30 +82,27 @@ contract AgreementArbitrator {
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) external {
-        if (msg.sender != provider && msg.sender != client)
-            revert NOT_SENDER_OR_CLIENT();
+        if (msg.sender != provider && msg.sender != client) revert NOT_SENDER_OR_CLIENT();
         if (termLength == 0) revert INVALID_TERM_LENGTH();
 
-        bytes32 agreementId = keccak256(
-            abi.encode(agreementNonce, provider, client)
-        );
+        bytes32 agreementId = keccak256(abi.encode(agreementNonce, provider, client));
 
         address counterParty = msg.sender == provider ? client : provider;
 
         // if the agreement has not been signed by the counter party, mark this party's approval and emit an event
         if (
-            agreementSignature[agreementId] !=
-            getAgreementHash({
-                signingParty: counterParty,
-                agreementNonce: agreementNonce,
-                provider: provider,
-                client: client,
-                contractURI: contractURI,
-                termLength: termLength,
-                streamToken: streamToken,
-                totalStreamedTokens: totalStreamedTokens,
-                terminationClauses: terminationClauses
-            })
+            agreementSignature[agreementId]
+                != getAgreementHash({
+                    signingParty: counterParty,
+                    agreementNonce: agreementNonce,
+                    provider: provider,
+                    client: client,
+                    contractURI: contractURI,
+                    termLength: termLength,
+                    streamToken: streamToken,
+                    totalStreamedTokens: totalStreamedTokens,
+                    terminationClauses: terminationClauses
+                })
         ) {
             bytes32 userAgreementHash = getAgreementHash({
                 signingParty: msg.sender,
@@ -140,17 +135,12 @@ contract AgreementArbitrator {
 
         // if both parties agree:
 
-        address contractooorAgreement = address(agreementSingleton)
-            .predictDeterministicAddress(agreementId);
+        address contractooorAgreement = address(agreementSingleton).predictDeterministicAddress(agreementId);
 
         // pull tokens:
         // we want to transfer the tokens before deploying the contract because we want to avoid
         //  having malicious tokens from reentering or tampering with our uninitialized stream contract
-        IERC20(streamToken).safeTransferFrom(
-            client,
-            provider,
-            totalStreamedTokens % termLength
-        );
+        IERC20(streamToken).safeTransferFrom(client, provider, totalStreamedTokens % termLength);
         IERC20(streamToken).safeTransferFrom(
             client,
             contractooorAgreement,
@@ -171,35 +161,21 @@ contract AgreementArbitrator {
                 cureTimeDays: terminationClauses.cureTimeDays,
                 legalCompulsion: terminationClauses.legalCompulsion,
                 moralTurpitude: terminationClauses.moralTurpitude,
-                counterpartyMalfeasance: terminationClauses
-                    .counterpartyMalfeasance,
-                bankruptcyDissolutionInsolvency: terminationClauses
-                    .bankruptcyDissolutionInsolvency,
-                lostControlOfPrivateKeys: terminationClauses
-                    .lostControlOfPrivateKeys,
+                counterpartyMalfeasance: terminationClauses.counterpartyMalfeasance,
+                bankruptcyDissolutionInsolvency: terminationClauses.bankruptcyDissolutionInsolvency,
+                lostControlOfPrivateKeys: terminationClauses.lostControlOfPrivateKeys,
                 contractURI: contractURI
             });
 
-            uint256 tokensToStream = totalStreamedTokens -
-                (totalStreamedTokens % termLength);
+            uint256 tokensToStream = totalStreamedTokens - (totalStreamedTokens % termLength);
             // initialize the contractooorAgreement
             streamId = ContractooorAgreement(contractooorAgreement).initialize(
-                sablier,
-                streamToken,
-                tokensToStream,
-                termLength,
-                initData
+                sablier, streamToken, tokensToStream, termLength, initData
             );
         }
 
         // emit an contractooorAgreement initiated event
-        emit AgreementInitiated(
-            agreementNonce,
-            provider,
-            client,
-            contractooorAgreement,
-            streamId
-        );
+        emit AgreementInitiated(agreementNonce, provider, client, contractooorAgreement, streamId);
     }
 
     function getAgreementHash(
@@ -213,20 +189,19 @@ contract AgreementArbitrator {
         uint256 totalStreamedTokens,
         TerminationClauses calldata terminationClauses
     ) public pure returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    signingParty,
-                    agreementNonce,
-                    provider,
-                    client,
-                    contractURI,
-                    termLength,
-                    streamToken,
-                    totalStreamedTokens,
-                    terminationClauses
-                )
-            );
+        return keccak256(
+            abi.encode(
+                signingParty,
+                agreementNonce,
+                provider,
+                client,
+                contractURI,
+                termLength,
+                streamToken,
+                totalStreamedTokens,
+                terminationClauses
+            )
+        );
     }
 }
 

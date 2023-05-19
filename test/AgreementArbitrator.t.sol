@@ -34,9 +34,7 @@ contract Tests is Test {
 
     function test_initiateAgreement(uint256 agreementAmount) public {
         uint32 TERM_LENGTH = 30 days;
-        vm.assume(
-            agreementAmount > TERM_LENGTH && agreementAmount < type(uint128).max
-        );
+        vm.assume(agreementAmount > TERM_LENGTH && agreementAmount < type(uint128).max);
 
         uint256 timestamp = 1674941221;
         vm.warp(timestamp);
@@ -80,7 +78,6 @@ contract Tests is Test {
             uint256 startTime,
             uint256 stopTime,
             ,
-
         ) = sablier.getStream(100000);
 
         // assertEq(sender, address(arbitrator), "sender");
@@ -89,20 +86,12 @@ contract Tests is Test {
         assertEq(startTime, block.timestamp, "startTime");
         assertEq(stopTime, block.timestamp + TERM_LENGTH, "stopTime");
         assertEq(tokenAddress, address(token));
-        assertEq(
-            token.balanceOf(address(serviceProvider)),
-            leftOvertokens,
-            "initial deposit"
-        );
+        assertEq(token.balanceOf(address(serviceProvider)), leftOvertokens, "initial deposit");
 
         vm.warp(block.timestamp + TERM_LENGTH);
         vm.prank(serviceProvider);
         sablier.withdrawFromStream(100000, agreementAmount - leftOvertokens);
-        assertEq(
-            token.balanceOf(address(serviceProvider)),
-            agreementAmount,
-            "final deposit"
-        );
+        assertEq(token.balanceOf(address(serviceProvider)), agreementAmount, "final deposit");
     }
 
     function test_cannotInitiateStreamForCounterParty() public {}
