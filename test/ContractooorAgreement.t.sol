@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import {ERC20} from "@solmate/test/utils/mocks/MockERC20.sol";
@@ -29,15 +29,17 @@ contract Tests is Test {
         );
 
         vm.label(serviceProvider, "SERVICE PROVIDER");
-        vm.label(client, "SERVICE RECEIVER");
+        vm.label(client, "CLIENT");
     }
 
-    function _initiateAgreement(uint256 agreementAmount, TerminationClauses memory terminationClauses)
-        internal
-        returns (address agreement)
-    {
+    function _initiateAgreement(
+        uint256 agreementAmount,
+        TerminationClauses memory terminationClauses
+    ) internal returns (address agreement) {
         uint32 TERM_LENGTH = 30 days;
-        assert(agreementAmount > TERM_LENGTH && agreementAmount < type(uint128).max);
+        assert(
+            agreementAmount > TERM_LENGTH && agreementAmount < type(uint128).max
+        );
 
         uint256 timestamp = 1674941221;
         vm.warp(timestamp);
@@ -70,27 +72,32 @@ contract Tests is Test {
             agreementAmount,
             terminationClauses
         );
-        (address sender,,,,,,,) = sablier.getStream(100000);
+        (address sender, , , , , , , ) = sablier.getStream(100000);
+        vm.label(sender, "AGREEMENT");
+
         return sender;
     }
 
     function _initiateAgreement() internal returns (address) {
-        return _initiateAgreement(
-            1 ether,
-            TerminationClauses({
-                atWillDays: 0,
-                cureTimeDays: 0,
-                legalCompulsion: false,
-                moralTurpitude: false,
-                bankruptcyDissolutionInsolvency: false,
-                counterpartyMalfeasance: false,
-                lostControlOfPrivateKeys: false
-            })
-        );
+        return
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: 0,
+                    cureTimeDays: 0,
+                    legalCompulsion: false,
+                    moralTurpitude: false,
+                    bankruptcyDissolutionInsolvency: false,
+                    counterpartyMalfeasance: false,
+                    lostControlOfPrivateKeys: false
+                })
+            );
     }
 
     function test_terminateByMutualConsent() public {
-        ContractooorAgreement agreement = ContractooorAgreement(_initiateAgreement());
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement()
+        );
 
         vm.prank(serviceProvider);
         agreement.terminateByMutualConsent("l8r");
@@ -106,14 +113,20 @@ contract Tests is Test {
     function test_nonPartiesCannotTerminateMutualConsent(address party) public {
         vm.assume(party != serviceProvider && party != client);
 
-        ContractooorAgreement agreement = ContractooorAgreement(_initiateAgreement());
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement()
+        );
 
         vm.prank(party);
 
-        vm.expectRevert(ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
         agreement.terminateByMutualConsent("l8r");
 
-        vm.expectRevert(ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
         agreement.issueNoticeOfTermination("l8r");
     }
 
@@ -171,7 +184,9 @@ contract Tests is Test {
         );
 
         vm.prank(party);
-        vm.expectRevert(ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
         agreement.issueNoticeOfTermination("l8r");
 
         vm.prank(client);
@@ -212,12 +227,17 @@ contract Tests is Test {
 
         vm.prank(party);
         if (uint256(reason) < 3) {
-            vm.expectRevert(ContractooorAgreement.RAGE_TERMINATION_NOT_ALLOWED.selector);
+            vm.expectRevert(
+                ContractooorAgreement.RAGE_TERMINATION_NOT_ALLOWED.selector
+            );
         }
         agreement.rageTerminate(reason, "bye");
     }
 
-    function test_cannotRageTerminateAsOtherParty(uint8 _reason, address party) public {
+    function test_cannotRageTerminateAsOtherParty(
+        uint8 _reason,
+        address party
+    ) public {
         vm.assume(party != serviceProvider && party != client);
         TerminationReason reason = TerminationReason(_reason % 7);
 
@@ -237,7 +257,9 @@ contract Tests is Test {
         );
 
         vm.prank(party);
-        vm.expectRevert(ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector);
+        vm.expectRevert(
+            ContractooorAgreement.NOT_CLIENT_OR_SERVICE_PROVIDER.selector
+        );
         agreement.rageTerminate(reason, "bye");
     }
 
@@ -263,7 +285,9 @@ contract Tests is Test {
             )
         );
 
-        bytes4 revertMsg = ContractooorAgreement.RAGE_TERMINATION_NOT_ALLOWED.selector;
+        bytes4 revertMsg = ContractooorAgreement
+            .RAGE_TERMINATION_NOT_ALLOWED
+            .selector;
 
         vm.startPrank(client);
 
@@ -277,9 +301,15 @@ contract Tests is Test {
 
         if (!moralTurpitude) {
             vm.expectRevert(revertMsg);
-            agreement.rageTerminate(TerminationReason.CrimesOfMoralTurpitude, "bye");
+            agreement.rageTerminate(
+                TerminationReason.CrimesOfMoralTurpitude,
+                "bye"
+            );
         } else {
-            agreement.rageTerminate(TerminationReason.CrimesOfMoralTurpitude, "bye");
+            agreement.rageTerminate(
+                TerminationReason.CrimesOfMoralTurpitude,
+                "bye"
+            );
             return;
         }
         if (!bankruptcyDissolutionInsolvency) {
@@ -305,19 +335,55 @@ contract Tests is Test {
         }
         if (!counterpartyMalfeasance) {
             vm.expectRevert(revertMsg);
-            agreement.rageTerminate(TerminationReason.CounterPartyMalfeasance, "bye");
+            agreement.rageTerminate(
+                TerminationReason.CounterPartyMalfeasance,
+                "bye"
+            );
         } else {
-            agreement.rageTerminate(TerminationReason.CounterPartyMalfeasance, "bye");
+            agreement.rageTerminate(
+                TerminationReason.CounterPartyMalfeasance,
+                "bye"
+            );
             return;
         }
         if (!lostControlOfPrivateKeys) {
             vm.expectRevert(revertMsg);
-            agreement.rageTerminate(TerminationReason.LossControlOfPrivateKeys, "bye");
+            agreement.rageTerminate(
+                TerminationReason.LossControlOfPrivateKeys,
+                "bye"
+            );
         } else {
-            agreement.rageTerminate(TerminationReason.LossControlOfPrivateKeys, "bye");
+            agreement.rageTerminate(
+                TerminationReason.LossControlOfPrivateKeys,
+                "bye"
+            );
             return;
         }
     }
 
-    function test_usersGetFundsBackIfStreamCancelled() public {}
+    function test_usersGetFundsBackIfStreamCancelled() public {
+        ContractooorAgreement agreement = ContractooorAgreement(
+            _initiateAgreement(
+                1 ether,
+                TerminationClauses({
+                    atWillDays: 0,
+                    cureTimeDays: 0,
+                    legalCompulsion: true,
+                    moralTurpitude: false,
+                    bankruptcyDissolutionInsolvency: false,
+                    counterpartyMalfeasance: false,
+                    lostControlOfPrivateKeys: false
+                })
+            )
+        );
+        uint256 streamAmount = 999999999997920000;
+
+        vm.prank(serviceProvider);
+        sablier.cancelStream(100_000);
+
+        assertEq(streamAmount, token.balanceOf(address(agreement)));
+
+        agreement.emergencyRecoverTokens(address(token));
+        assertEq(streamAmount, token.balanceOf(address(client)));
+    }
 }

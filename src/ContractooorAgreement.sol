@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
 import {Initializable} from "@openzeppelin/proxy/utils/Initializable.sol";
 import {IERC20} from "@openzeppelin/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
 import {TerminationClauses, Agreement, TerminationReason} from "contracts/lib/Types.sol";
-import {AgreementArbitrator} from "contracts/AgreementArbitrator.sol";
-
-import {console2} from "forge-std/console2.sol";
 
 uint256 constant MAX_BREACH_ALLOWANCE = 3;
 
@@ -37,7 +34,6 @@ contract ContractooorAgreement is Initializable {
     event RageTermination(address indexed terminator, string terminationInfo, TerminationReason indexed reason);
     event AgreementTerminated(address indexed terminator, TerminationReason indexed reason);
 
-    AgreementArbitrator private arbitrator;
     ISablier private sablier;
     uint96 public streamId;
     Agreement public agreement;
@@ -99,7 +95,6 @@ contract ContractooorAgreement is Initializable {
         uint256 termLength,
         Agreement calldata _agreement
     ) public initializer returns (uint256 _streamId) {
-        arbitrator = AgreementArbitrator(msg.sender);
         sablier = _sablier;
         agreement = _agreement;
 

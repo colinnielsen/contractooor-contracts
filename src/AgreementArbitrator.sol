@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import {ISablier} from "@sablier/protocol/contracts/interfaces/ISablier.sol";
 import {IERC20} from "@openzeppelin/interfaces/IERC20.sol";
@@ -51,7 +51,7 @@ contract AgreementArbitrator {
     }
 
     /// @notice a single function for parties to offer, counter-offer, and agree to a contract
-    /// @dev takes the hash of all the parameters to make a agreementGUID, which is counter-signed, then used as salt for the contract deployment
+    /// @dev takes the hash of all the parameters to make an `agreementHash`, which is counter-signed, then used as salt for the contract deployment
     /// @notice SPEC:
     /// A call to this function will prompt pull tokens from the service client, and create a stream of those tokens to the service provider given:
     ///     A1. Either the `provider` or `client` have called this function with the exact same arguments - otherwise :: marks the agreement as signed
@@ -61,9 +61,9 @@ contract AgreementArbitrator {
     ///     A5. If the agreement has already been counterparty signed, this contract must have `totalStreamedTokens` worth of operator approval from `client`
     ///
     /// RES-A. If `msg.sender` is the first signing party:
-    ///     RES-A.1: Mark the user's signature of the `agreementGUID` as true
-    ///         an agreement GUID is defined as: the keccak256 hash of all the abi.encoded calldata parameters
-    ///     RES-A.2: emit an AgreementProposed event with the `aggreementGUID` and all the calldata parameters
+    ///     RES-A.1: Mark the user's signature of the `agreementHash` as true
+    ///         an agreement hash is defined as: the keccak256 hash of all the abi.encoded calldata parameters
+    ///     RES-A.2: emit an AgreementProposed event with the `agreementHash` and all the calldata parameters
     ///
     /// RES-B. If `msg.sender` is the second party to sign:
     ///     RES-B.1: delete the counterparty's leftover signature
@@ -71,7 +71,7 @@ contract AgreementArbitrator {
     ///     RES-B.3: send `totalStreamedTokens` - `remainder` of tokens to the Contractooor contract
     ///     RES-B.4: create a new Contractooor agreement proxy clone
     ///     RES-B.5: call `initialize` on the new proxy clone
-    ///     RES-B.6: emit an `AgreementInitiated` event with the `agreementGUID` and the Contractooor addresss
+    ///     RES-B.6: emit an `AgreementInitiated` event with the `agreementHash` and the Contractooor addresss
     function agreeTo(
         uint256 agreementNonce,
         address provider,
@@ -134,7 +134,7 @@ contract AgreementArbitrator {
         }
 
         // if both parties agree:
-
+        delete agreementSignature[agreementId];
         address contractooorAgreement = address(agreementSingleton).predictDeterministicAddress(agreementId);
 
         // pull tokens:
@@ -204,21 +204,3 @@ contract AgreementArbitrator {
         );
     }
 }
-
-/**
- * - DAO: legal entity name, type, and jurisdiction
- *     - SP: legal entity name, type, jurisdiction
- *     - SP's counterparty for agreement address
- *     - agreement scope of work
- *     - term length
- *     - stream token
- *     - total tokens streamed over term
- *     - [x] at will (n amount of days) (optional)
- *     - [x] mutual consent (always enabled)
- *     - [x] material breach (always enabled) (n amount of days to cure breach)
- *     - rage terminate (optional, select from choices below)
- * legal compulsion
- * counterparty malfeasance (indictment, fraud, sanctions, crimes of moral turpitude)
- * bankruptcy, dissolution, insolvency, loss of necessary license/certification
- * counterparty lost exclusive control over private keys
- */

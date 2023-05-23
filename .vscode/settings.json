@@ -1,7 +1,7 @@
 {
   "solidity.packageDefaultDependenciesContractsDirectory": "src",
   "solidity.packageDefaultDependenciesDirectory": "lib",
-  "solidity.compileUsingRemoteVersion": "v0.8.17+commit.8df45f5f",
+  "solidity.compileUsingRemoteVersion": "v0.8.20+commit.a1b79de6",
   "woke.compiler.solc.remappings": [
     "ds-test/=lib/forge-std/lib/ds-test/src/",
     "forge-std/=lib/forge-std/src/",
