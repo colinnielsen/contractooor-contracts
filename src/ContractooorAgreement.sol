@@ -7,7 +7,7 @@ import {IERC20} from "@openzeppelin/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
 import {TerminationClauses, Agreement, TerminationReason} from "contracts/lib/Types.sol";
 
-uint256 constant MAX_BREACH_ALLOWANCE = 3;
+uint256 constant MAX_CURE_ALLOWANCE = 2;
 
 /// @title ContractooorAgreement
 /// @author @colinnielsen
@@ -41,22 +41,10 @@ contract ContractooorAgreement is Initializable {
     bytes32 public mutualConsentTerminationId;
     mapping(address => uint256) public atWillTerminationTimestamp;
     mapping(address => uint256) public materialBreachTimestamp;
-    uint256 public timesContractBreached;
+    uint256 public timesContractCured;
 
     constructor() {
         _disableInitializers();
-    }
-
-    function onlyClient() internal view returns (address otherParty) {
-        Agreement memory _agreement = agreement;
-        if (msg.sender != _agreement.client) revert NOT_CLIENT();
-        otherParty = msg.sender == _agreement.client ? _agreement.provider : _agreement.client;
-    }
-
-    function onlyServiceProvider() internal view returns (address otherParty) {
-        Agreement memory _agreement = agreement;
-        if (msg.sender != _agreement.provider) revert NOT_SERVICE_PROVIDER();
-        otherParty = msg.sender == _agreement.client ? _agreement.provider : _agreement.client;
     }
 
     function onlyClientOrServiceProvider() internal view returns (address otherParty) {
@@ -191,7 +179,7 @@ contract ContractooorAgreement is Initializable {
     ///     RES2: emits a `TerminationProposalDeleted` event
     ///
     function withdrawNoticeOfMaterialBreach(string memory withdrawalReason) public {
-        // SPEC.S1
+        // SPEC.S1 - IS IMPLICIT DUE TO `issueNoticeOfMaterialBreach`'s CHECK!
         onlyClientOrServiceProvider();
         // SPEC.RES1
         delete materialBreachTimestamp[msg.sender];
@@ -222,7 +210,7 @@ contract ContractooorAgreement is Initializable {
         // SPEC.RES1
         delete materialBreachTimestamp[counterParty];
         // SPEC.RES2
-        timesContractBreached++;
+        timesContractCured++;
 
         // SPEC.RES3
         emit TerminationProposalDeleted(msg.sender, cureInfo, TerminationReason.MaterialBreach);
@@ -249,13 +237,13 @@ contract ContractooorAgreement is Initializable {
         uint256 issueTimestamp = materialBreachTimestamp[msg.sender];
         bool curetimeReached = issueTimestamp != 0 // SPEC.S2
             // SPEC.S3.1
-            && block.timestamp > (uint256(agreement.cureTimeDays) * 1 days) + issueTimestamp;
+            && block.timestamp > issueTimestamp + (uint256(agreement.cureTimeDays) * 1 days);
 
         if (
             // SPEC.S3.1
             !curetimeReached
             // SPEC.S3.2
-            || timesContractBreached < MAX_BREACH_ALLOWANCE
+            && timesContractCured < MAX_CURE_ALLOWANCE
         ) revert CURE_TIME_NOT_MET();
 
         // @dev done for a gas refund
@@ -389,7 +377,7 @@ contract ContractooorAgreement is Initializable {
         // SPEC.S2 - 1,2, SPEC.RES1
         bool cancelled = sablier.cancelStream(_streamId);
         // SPEC.S3
-        if (!cancelled) revert STREAM_CANCELLATION_FAILED();
+        // if (!cancelled) revert STREAM_CANCELLATION_FAILED();
 
         // SPEC.RES2
         IERC20(streamToken).safeTransfer(agreement.client, IERC20(streamToken).balanceOf(address(this)));

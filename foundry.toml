@@ -12,3 +12,6 @@ goerli = "${GOERLI_RPC_URL}"
 goerli = { key = "${ETHERSCAN_API_KEY}" }
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
+[profile.ci.fuzz]
+runs = 50_000
+max_test_rejects = 800000
