@@ -34,9 +34,7 @@ contract Tests is Test {
     }
 
     function test_initiateAgreement(uint256 agreementAmount) public {
-        vm.assume(
-            agreementAmount > TERM_LENGTH && agreementAmount < type(uint128).max
-        );
+        vm.assume(agreementAmount > TERM_LENGTH && agreementAmount < type(uint128).max);
 
         uint256 timestamp = 1674941221;
         vm.warp(timestamp);
@@ -80,7 +78,6 @@ contract Tests is Test {
             uint256 startTime,
             uint256 stopTime,
             ,
-
         ) = sablier.getStream(100000);
 
         // assertEq(sender, address(arbitrator), "sender");
@@ -89,19 +86,47 @@ contract Tests is Test {
         assertEq(startTime, block.timestamp, "startTime");
         assertEq(stopTime, block.timestamp + TERM_LENGTH, "stopTime");
         assertEq(tokenAddress, address(token));
-        assertEq(
-            token.balanceOf(address(serviceProvider)),
-            leftOvertokens,
-            "initial deposit"
-        );
+        assertEq(token.balanceOf(address(serviceProvider)), leftOvertokens, "initial deposit");
 
         vm.warp(block.timestamp + TERM_LENGTH);
         vm.prank(serviceProvider);
         sablier.withdrawFromStream(100000, agreementAmount - leftOvertokens);
-        assertEq(
-            token.balanceOf(address(serviceProvider)),
+        assertEq(token.balanceOf(address(serviceProvider)), agreementAmount, "final deposit");
+    }
+
+    function test_randoCannotInitiateForTwoParties(address rando) public {
+        vm.assume(rando != serviceProvider && rando != client);
+
+        uint256 agreementAmount = 1 ether;
+        token.mint(client, agreementAmount * 2);
+
+        vm.prank(client);
+        token.approve(address(arbitrator), agreementAmount * 2);
+
+        // create an agreement between the sp and the client with an agreementNonce of 1
+        vm.prank(serviceProvider);
+        arbitrator.agreeTo(
+            1,
+            serviceProvider,
+            client,
+            "https://example.com",
+            TERM_LENGTH,
+            address(token),
             agreementAmount,
-            "final deposit"
+            TerminationClauses(0, 0, false, false, false, false, false)
+        );
+
+        vm.prank(rando);
+        vm.expectRevert(AgreementArbitrator.NOT_SENDER_OR_CLIENT.selector);
+        arbitrator.agreeTo(
+            1,
+            serviceProvider,
+            client,
+            "https://example.com",
+            TERM_LENGTH,
+            address(token),
+            agreementAmount,
+            TerminationClauses(0, 0, false, false, false, false, false)
         );
     }
 
